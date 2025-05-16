@@ -4,7 +4,6 @@ FROM python:3.10-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-PIP_NO_CACHE_DIR=1
 
 # Create and set working directory
 RUN mkdir /millionestate
