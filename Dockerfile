@@ -1,9 +1,10 @@
 # Use Python version that matches your runtime.txt (adjust if needed)
-FROM python:3.10.7
+FROM python:3.10-slim
 
 # Set environment variables
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+PIP_NO_CACHE_DIR=1
 
 # Create and set working directory
 RUN mkdir /millionestate
@@ -25,7 +26,8 @@ RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy entire project (adjust according to your actual structure)
-COPY . .
+# Copy project files with proper ownership
+COPY --chown=1001:0 . .
 
 # Special handling for different components (adjust as needed)
 RUN mkdir -p /millionestate/staticfiles \
