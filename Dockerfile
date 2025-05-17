@@ -1,5 +1,4 @@
 #!/bin/bash
-set -eo pipefail
 
 # --- Configuration ---
 STUDENT_NAME="themillion"
