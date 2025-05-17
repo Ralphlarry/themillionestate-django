@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM python:3.10-slim as builder
+FROM python:3.10-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
@@ -10,11 +10,9 @@ RUN pip install --user -r requirements.txt
 
 FROM python:3.10-slim
 WORKDIR /app
-COPY --from=builder /root/.local /root/.local
 COPY --chown=1001:0 . .
 
-ENV PATH=/root/.local/bin:$PATH \
-    PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1
 
 USER 1001
 EXPOSE 8000
