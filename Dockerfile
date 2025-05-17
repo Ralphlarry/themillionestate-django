@@ -1,61 +1,21 @@
-#!/bin/bash
+# syntax=docker/dockerfile:1.4
+FROM python:3.10-slim as builder
 
-# --- Configuration ---
-STUDENT_NAME="themillion"
-VERSION="v1.0.${BUILD_NUMBER}"
-IMAGE_NAME="${STUDENT_NAME}estate"
-REGISTRY_NAME="larryawesome"
-FULL_IMAGE_URI="${REGISTRY_NAME}/${IMAGE_NAME}:${VERSION}"
-HOST_PORT="8392"
-APP_PORT="8000"
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
-# --- Initial Setup ---
-docker --version
-ls -lhtra
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --user -r requirements.txt
 
-# --- Cleanup ---
-docker ps -aqf "name=${STUDENT_NAME}" | xargs --no-run-if-empty docker rm -f || true
-docker rmi -f ${FULL_IMAGE_URI} 2>/dev/null || true
-docker rmi -f ${IMAGE_NAME}:${VERSION} 2>/dev/null || true
+FROM python:3.10-slim
+WORKDIR /app
+COPY --from=builder /root/.local /root/.local
+COPY --chown=1001:0 . .
 
-# --- Build Stage with Buildx ---
-docker buildx create --use
-docker buildx build \
-  --platform linux/amd64 \
-  --provenance=false \
-  --no-cache \
-  -t ${IMAGE_NAME}:${VERSION} \
-  -t ${FULL_IMAGE_URI} \
-  --push .
+ENV PATH=/root/.local/bin:$PATH \
+    PYTHONUNBUFFERED=1
 
-# --- Image Verification ---
-echo "--------------- Image Verification ----------"
-docker images | grep ${IMAGE_NAME}
-docker images --filter="reference=${IMAGE_NAME}"
-
-# --- Test Stage ---
-echo "--------------- Test Deployment ----------"
-docker run --name ${STUDENT_NAME} -d \
-  -p ${HOST_PORT}:${APP_PORT} \
-  --memory="800m" \
-  --cpus="1.0" \
-  ${FULL_IMAGE_URI}
-  
-sleep 10
-docker ps --filter "name=${STUDENT_NAME}"
-docker logs ${STUDENT_NAME}
-
-# --- Release Validation ---
-echo "--------------- Smoke Test ----------"
-curl -sSf http://localhost:${HOST_PORT}/health-check || {
-  echo "Application health check failed"
-  exit 1
-}
-
-# --- Final Cleanup ---
-echo "---------------Final Cleanup-----------------"
-docker stop ${STUDENT_NAME} || true
-docker rm -f ${STUDENT_NAME} || true
-
-echo "--------------- Push Verification ----------"
-docker pull ${FULL_IMAGE_URI}
+USER 1001
+EXPOSE 8000
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "themillionestate.wsgi:application"]
