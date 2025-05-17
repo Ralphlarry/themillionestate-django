@@ -1,42 +1,62 @@
-# Use Python version that matches your runtime.txt (adjust if needed)
-FROM python:3.10-slim
+#!/bin/bash
+set -eo pipefail
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+# --- Configuration ---
+STUDENT_NAME="themillion"
+VERSION="v1.0.${BUILD_NUMBER}"
+IMAGE_NAME="${STUDENT_NAME}estate"
+REGISTRY_NAME="larryawesome"
+FULL_IMAGE_URI="${REGISTRY_NAME}/${IMAGE_NAME}:${VERSION}"
+HOST_PORT="8392"
+APP_PORT="8000"
 
-# Create and set working directory
-RUN mkdir /millionestate
-WORKDIR /millionestate
+# --- Initial Setup ---
+docker --version
+ls -lhtra
 
-# Install system dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    gcc \
-    python3-dev \
-    libpq-dev \
-    libjpeg-dev \
-    zlib1g-dev && \
-    rm -rf /var/lib/apt/lists/*
+# --- Cleanup ---
+docker ps -aqf "name=${STUDENT_NAME}" | xargs --no-run-if-empty docker rm -f || true
+docker rmi -f ${FULL_IMAGE_URI} 2>/dev/null || true
+docker rmi -f ${IMAGE_NAME}:${VERSION} 2>/dev/null || true
 
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# --- Build Stage with Buildx ---
+docker buildx create --use
+docker buildx build \
+  --platform linux/amd64 \
+  --provenance=false \
+  --no-cache \
+  -t ${IMAGE_NAME}:${VERSION} \
+  -t ${FULL_IMAGE_URI} \
+  --push .
 
-# Copy entire project (adjust according to your actual structure)
-# Copy project files with proper ownership
-COPY --chown=1001:0 . .
+# --- Image Verification ---
+echo "--------------- Image Verification ----------"
+docker images | grep ${IMAGE_NAME}
+docker images --filter="reference=${IMAGE_NAME}"
 
-# Special handling for different components (adjust as needed)
-RUN mkdir -p /millionestate/staticfiles \
-    /millionestate/mediafiles
+# --- Test Stage ---
+echo "--------------- Test Deployment ----------"
+docker run --name ${STUDENT_NAME} -d \
+  -p ${HOST_PORT}:${APP_PORT} \
+  --memory="800m" \
+  --cpus="1.0" \
+  ${FULL_IMAGE_URI}
+  
+sleep 10
+docker ps --filter "name=${STUDENT_NAME}"
+docker logs ${STUDENT_NAME}
 
-# Collect static files (enable if needed)
-# RUN python manage.py collectstatic --noinput
+# --- Release Validation ---
+echo "--------------- Smoke Test ----------"
+curl -sSf http://localhost:${HOST_PORT}/health-check || {
+  echo "Application health check failed"
+  exit 1
+}
 
-# Expose port
-EXPOSE 8000
+# --- Final Cleanup ---
+echo "---------------Final Cleanup-----------------"
+docker stop ${STUDENT_NAME} || true
+docker rm -f ${STUDENT_NAME} || true
 
-# Start server (verify WSGI module location)
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "themillionestate.wsgi:application"]
+echo "--------------- Push Verification ----------"
+docker pull ${FULL_IMAGE_URI}
